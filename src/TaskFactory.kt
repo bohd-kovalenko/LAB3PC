@@ -1,7 +1,10 @@
 import java.time.Duration
+import java.time.Instant
 import java.util.*
 
 class TaskFactory {
+
+    val averageTimeToComplete: MutableList<Long> = mutableListOf()
 
     private companion object {
         const val LOWER_BOUND = 5L
@@ -12,9 +15,12 @@ class TaskFactory {
 
     fun createTask(): Task {
         val duration = Duration.ofSeconds(random.nextLong(LOWER_BOUND, UPPER_BOUND))
-        return Task(duration) {
+        val creationTime = Instant.now()
+        return Task(duration, creationTime) {
             Thread.sleep(duration)
-            println("Task finished! Duration: $duration")
+            val timeToComplete = Duration.between(creationTime, Instant.now())
+            averageTimeToComplete.add(timeToComplete.toMillis())
+            println("Task finished! Duration: $duration, current thread: ${Thread.currentThread().name}, time to complete: $timeToComplete")
         }
     }
 }

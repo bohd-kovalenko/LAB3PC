@@ -1,4 +1,5 @@
 import java.util.*
+import kotlin.concurrent.withLock
 
 class DefaultThreadPool(queueCount: Int) : ThreadPool {
 
@@ -11,40 +12,62 @@ class DefaultThreadPool(queueCount: Int) : ThreadPool {
 
     @Synchronized
     override fun execute(task: Task) {
-        val leastLoadedQueue = queues().minBy { it.sumLoad }
-        leastLoadedQueue.pushTask(task)
-        leastLoadedQueue.sumLoad += task.duration
+        if (state !== ThreadPoolState.SHUTDOWN) {
+            val leastLoadedQueue = queues().minBy { it.sumLoad }
+            leastLoadedQueue.pushTask(task)
+            println("Task added to queue: ${leastLoadedQueue.id}, current queue load = ${leastLoadedQueue.sumLoad}")
+            leastLoadedQueue.sumLoad += task.duration
+        }
     }
 
     @Synchronized
     override fun shutdown(force: Boolean) {
-        state = ThreadPoolState.SHUTDOWN
+        changeState(ThreadPoolState.SHUTDOWN)
         if (force) {
-            workerThreads().forEach { it.interrupt() }
+            workerThreads().forEach { thread ->
+                {
+                    runCatching { thread.interrupt() }
+                }
+            }
         }
     }
 
     @Synchronized
     override fun pause() {
         if (state === ThreadPoolState.ACTIVE) {
-            state = ThreadPoolState.PAUSED
+            changeState(ThreadPoolState.PAUSED)
         }
     }
 
     @Synchronized
     override fun resume() {
         if (state === ThreadPoolState.PAUSED) {
-            queues().forEach {
-                it.condition.signalAll()
+            changeState(ThreadPoolState.ACTIVE)
+            queues().forEach { queue ->
+                queue.lock.withLock {
+                    queue.condition.signalAll()
+                }
             }
         }
     }
 
     private fun initQueues(queueCount: Int) = (0..<queueCount)
-        .map { WorkingQueue<Task>(LinkedList()) }
-        .associateWith { queue -> List(THREADS_PER_QUEUE) { WorkingThread(queue).apply { start() } } }
+        .map { queueIndex -> WorkingQueue<Task>(LinkedList()) }
+        .associateWith { queue ->
+            List(THREADS_PER_QUEUE) { threadIndex ->
+                val threadName = "Queue-${queue.id}-Thread-$threadIndex"
+                WorkingThread(queue, threadName).apply { start() }
+            }
+        }
+
+    private fun changeState(newState: ThreadPoolState) {
+        state = newState
+        queues().forEach { queue ->
+            queue.state = newState
+        }
+    }
 
     private fun workerThreads() = queueMap.values.flatten()
 
-    private fun queues() = queueMap.keys
+    fun queues() = queueMap.keys
 }

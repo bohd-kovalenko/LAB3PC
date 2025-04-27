@@ -1,4 +1,4 @@
-internal enum class ThreadPoolState {
+enum class ThreadPoolState {
     ACTIVE,
     PAUSED,
     SHUTDOWN
