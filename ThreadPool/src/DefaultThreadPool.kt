@@ -25,9 +25,7 @@ class DefaultThreadPool(queueCount: Int) : ThreadPool {
         changeState(ThreadPoolState.SHUTDOWN)
         if (force) {
             workerThreads().forEach { thread ->
-                {
-                    runCatching { thread.interrupt() }
-                }
+                runCatching { thread.interrupt() }
             }
         }
     }

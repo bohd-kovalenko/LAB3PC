@@ -6,20 +6,28 @@ internal class WorkingThread(private val servingQueue: WorkingQueue<Task>, name:
     private val averageAwaitTimeMs: MutableList<Long> = mutableListOf()
 
     override fun run() {
-        while (active() || servingQueue.queue.isNotEmpty()) {
-            var task: Task? = null
-            servingQueue.lock.lock()
-            try {
-                handleWait()
-                task = getTask()
-            } finally {
-                servingQueue.lock.unlock()
-                tasksHandledCount++
-                task?.execute?.invoke()
+        runCatching {
+            while (active() || servingQueue.queue.isNotEmpty()) {
+                var task: Task? = null
+                servingQueue.lock.lock()
+                try {
+                    handleWait()
+                    task = getTask()
+                } finally {
+                    servingQueue.lock.unlock()
+                    tasksHandledCount++
+                    task?.execute?.invoke()
+                }
             }
+            val sumAwaitTimeMs = averageAwaitTimeMs.sum()
+            println(
+                "Thread $name handled $tasksHandledCount tasks, average await time: ${
+                    Duration.ofMillis(
+                        sumAwaitTimeMs / tasksHandledCount
+                    )
+                }"
+            )
         }
-        val sumAwaitTimeMs = averageAwaitTimeMs.sum()
-        println("Thread $name handled $tasksHandledCount tasks, average await time: ${Duration.ofMillis(sumAwaitTimeMs / tasksHandledCount)}")
     }
 
     private fun handleWait() {
